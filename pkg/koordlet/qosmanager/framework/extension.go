@@ -37,6 +37,7 @@ var (
 
 	defaultQOSExtPluginsFG = map[featuregate.Feature]featuregate.FeatureSpec{}
 
+	// TODO 这玩意又是啥？
 	globalExtensionPlugins = map[featuregate.Feature]ExtensionPlugin{}
 )
 

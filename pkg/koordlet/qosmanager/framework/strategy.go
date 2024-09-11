@@ -18,6 +18,7 @@ package framework
 
 type QOSStrategyFactory = func(opt *Options) QOSStrategy
 
+// QOSStrategy TODO 如何理解QOS策略的抽象设计？
 type QOSStrategy interface {
 	Enabled() bool
 	Setup(*Context)

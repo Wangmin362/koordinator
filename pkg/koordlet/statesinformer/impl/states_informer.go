@@ -95,6 +95,7 @@ type statesInformer struct {
 	getGPUDriverAndModelFunc GetGPUDriverAndModelFunc
 }
 
+// TODO 这里的InformerPlugin其实就是各个资源插件，这里进行了同意抽象，其实就是各个资源的Informer
 type informerPlugin interface {
 	Setup(ctx *PluginOption, state *PluginState)
 	Start(stopCh <-chan struct{})

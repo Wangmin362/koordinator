@@ -97,6 +97,9 @@ func New(opt *framework.Options) framework.QOSStrategy {
 
 func (b *blkIOReconcile) init(stopCh <-chan struct{}) error {
 	b.executor.Run(stopCh)
+
+	// TODO 这样写，有啥用？ 似乎没有传递需要同步的资源呀？
+	// TODO 这里肯定是一个Bug, 没有传递第二个参数，这里默认就是执行成功的，根本不会等到PVC同步成功。
 	if !cache.WaitForCacheSync(stopCh) {
 		return fmt.Errorf("%s: timed out waiting for pvc caches to sync", BlkIOReconcileName)
 	}

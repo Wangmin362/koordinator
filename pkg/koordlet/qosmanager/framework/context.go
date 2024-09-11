@@ -35,6 +35,7 @@ import (
 )
 
 type Context struct {
+	// TODO 驱逐器，应该就是用来驱逐Pod组件， 1、什么时候需要驱逐一个Pod? 2、需要驱逐Pod的时候什么样的Pod会被驱逐？
 	Evictor    *Evictor
 	Strategies map[string]QOSStrategy
 }

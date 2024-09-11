@@ -87,6 +87,10 @@ func NewDaemon(config *config.Configuration) (Daemon, error) {
 	topologyClient := topologyclientset.NewForConfigOrDie(config.KubeRestConf)
 	schedulingClient := v1alpha1.NewForConfigOrDie(config.KubeRestConf)
 
+	// 1、MetricCache其实就是Koordlet架构图中的Storage，用于存储StateInfo以及Metrics
+	// 2、就像介绍一样，MetricCache主要用于存储两种类型的数据，一种是时间数据，通过TSDBStorage存储，主要是指标，
+	// 时间序列类型存储历史数据用于统计目的，例如 CPU 和内存使用情况；另外一种是KV类型的数据，也被称之为静态类型数据，
+	// 静态类型包括节点、Pod 和容器的状态信息，例如节点的 CPU 信息、Pod 的元数据。
 	metricCache, err := metriccache.NewMetricCache(config.MetricCacheConf)
 	if err != nil {
 		return nil, err

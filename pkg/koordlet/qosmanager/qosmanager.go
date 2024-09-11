@@ -44,6 +44,7 @@ type QOSManager interface {
 }
 
 type qosManager struct {
+	// QOSManager所依赖的组件，TODO 我觉得这里称之为Options并不合适，参数是参数，依赖的组件应该是依赖的组件
 	options *framework.Options
 	context *framework.Context
 }
@@ -57,12 +58,15 @@ func NewQOSManager(cfg *framework.Config, schema *apiruntime.Scheme, kubeClient 
 	eventBroadcaster.StartRecordingToSink(&clientcorev1.EventSinkImpl{Interface: kubeClient.CoreV1().Events("")})
 	recorder := eventBroadcaster.NewRecorder(schema, corev1.EventSource{Component: "koordlet-qosManager", Host: nodeName})
 	cgroupReader := resourceexecutor.NewCgroupReader()
+
+	// TODO 驱逐器，应该就是用来驱逐Pod组件， 1、什么时候需要驱逐一个Pod? 2、需要驱逐Pod的时候什么样的Pod会被驱逐？
 	evictor := framework.NewEvictor(kubeClient, recorder, evictVersion)
 
+	// 各个依赖的组件
 	opt := &framework.Options{
 		CgroupReader:        cgroupReader,
-		StatesInformer:      statesInformer,
-		MetricCache:         metricCache,
+		StatesInformer:      statesInformer, // 用于和APIServer交互获取Pod, 容器，node相关数据并放入到MetricCache当中
+		MetricCache:         metricCache,    // 用于缓存Pod,容器,node的时间数据以及静态数据
 		EventRecorder:       recorder,
 		KubeClient:          kubeClient,
 		EvictVersion:        evictVersion,
@@ -76,6 +80,7 @@ func NewQOSManager(cfg *framework.Config, schema *apiruntime.Scheme, kubeClient 
 	}
 
 	for name, strategyFn := range plugins.StrategyPlugins {
+		// 实例化各个QOS策略插件
 		ctx.Strategies[name] = strategyFn(opt)
 	}
 
@@ -88,6 +93,8 @@ func NewQOSManager(cfg *framework.Config, schema *apiruntime.Scheme, kubeClient 
 
 func (r *qosManager) setup() {
 	for _, s := range r.context.Strategies {
+		// 为各个QOS策略插件设置上下文，其实就是设置驱逐器以及其它插件？
+		// TODO 这里为什么要这么设计？
 		s.Setup(r.context)
 	}
 }
@@ -95,6 +102,7 @@ func (r *qosManager) setup() {
 func (r *qosManager) Run(stopCh <-chan struct{}) error {
 	defer utilruntime.HandleCrash()
 	// minimum interval is one second.
+	// TODO 这里为什么要做这个检测，小于1秒钟会怎样？
 	if r.options.MetricAdvisorConfig.CollectResUsedInterval < time.Second {
 		klog.Infof("collectResUsedIntervalSeconds is %v, qos manager is disabled",
 			r.options.MetricAdvisorConfig.CollectResUsedInterval)
@@ -104,30 +112,34 @@ func (r *qosManager) Run(stopCh <-chan struct{}) error {
 	klog.Info("Starting qos manager")
 	r.setup()
 
-	// 运行驱逐器
+	// TODO 运行驱逐器
 	err := r.context.Evictor.Start(stopCh)
 	if err != nil {
 		klog.Fatal("start evictor failed %v", err)
 	}
 
-	// 运行各个插件
+	// TODO 这玩意目前看起来就是空的，没啥用。 什么叫做灰色控制？
 	go framework.RunQOSGreyCtrlPlugins(r.options.KubeClient, stopCh)
 
+	// StateInformer其实就是各个资源Informer的组合，这里其实就是在等到各个资源Informer同步完成
 	if !cache.WaitForCacheSync(stopCh, r.options.StatesInformer.HasSynced) {
 		return fmt.Errorf("time out waiting for states informer caches to sync")
 	}
 
 	for name, strategy := range r.context.Strategies {
 		klog.V(4).Infof("ready to start qos strategy %v", name)
-		if !strategy.Enabled() {
+		if !strategy.Enabled() { // 插件没有启用的话，直接忽略，可以通过在启动的时候修改命令行参数启用需要的特性开关
 			klog.V(4).Infof("qos strategy %v is not enabled, skip running", name)
 			continue
 		}
+
+		// TODO 启动各个策略插件  QosManger的核心其实就是各个插件
 		go strategy.Run(stopCh)
 		klog.V(4).Infof("qos strategy %v start", name)
 	}
 
 	klog.Infof("start qos manager extensions")
+	// 目前是空的，啥也没有
 	framework.SetupPlugins(r.options.KubeClient, r.options.MetricCache, r.options.StatesInformer)
 	utilruntime.Must(framework.StartPlugins(r.options.Config.QOSExtensionCfg, stopCh))
 
