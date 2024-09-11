@@ -38,7 +38,8 @@ type metricAdvisor struct {
 	context *framework.Context
 }
 
-func NewMetricAdvisor(cfg *framework.Config, statesInformer statesinformer.StatesInformer, metricCache metriccache.MetricCache) MetricAdvisor {
+func NewMetricAdvisor(cfg *framework.Config, statesInformer statesinformer.StatesInformer,
+	metricCache metriccache.MetricCache) MetricAdvisor {
 	opt := &framework.Options{
 		Config:         cfg,
 		StatesInformer: statesInformer,

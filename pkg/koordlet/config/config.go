@@ -89,6 +89,7 @@ func (c *Configuration) InitFlags(fs *flag.FlagSet) {
 }
 
 func (c *Configuration) InitKubeConfigForKoordlet(kubeAPIQPS float64, kubeAPIBurst int) error {
+	// 加载kubeConfig配置我呢见
 	cfg, err := config.GetConfig()
 	if err != nil {
 		return err

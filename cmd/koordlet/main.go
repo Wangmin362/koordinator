@@ -37,14 +37,17 @@ import (
 )
 
 func main() {
+	// TODO koordlet配置初始化
 	cfg := config.NewConfiguration()
 	cfg.InitFlags(flag.CommandLine)
 	klog.InitFlags(nil)
-	flag.Parse()
+	flag.Parse() // 把用户命令行输入的参数进行解析，其实可以理解为一个反序列化的一个过程
 
+	// 每5秒钟刷新一次日志到磁盘上进行持久化
 	go wait.Forever(klog.Flush, 5*time.Second)
-	defer klog.Flush()
+	defer klog.Flush() // 协程退出的时候依然需要日志刷新
 
+	// pprof性能调优相关
 	if *options.EnablePprof {
 		go func() {
 			klog.V(4).Infof("Starting pprof on %v", *options.PprofAddr)
@@ -54,24 +57,28 @@ func main() {
 		}()
 	}
 
+	// 特性开关设置，这里应该是检测了特性开关的有效性，因为用户可能配置错误，此时肯定需要报错，并直接退出
 	if err := features.DefaultMutableKoordletFeatureGate.SetFromMap(cfg.FeatureGates); err != nil {
 		klog.Fatalf("Unable to setup feature-gates: %v", err)
 	}
 
+	// 优雅推出，注册SIGINT, SIGTERM信号
 	stopCtx := signals.SetupSignalHandler()
 
-	// setup the default auditor
+	// setup the default auditor 审计相关的
 	if features.DefaultKoordletFeatureGate.Enabled(features.AuditEvents) {
 		audit.SetupDefaultAuditor(cfg.AuditConf, stopCtx.Done())
 	}
 
 	// Get a config to talk to the apiserver
 	klog.Info("Setting up kubeconfig for koordlet")
+	// 利用用户给启动命令行设置的配置以及koordlet默认配置初始化koordlet配置，这里其实就是在设置KubeConfig配置，后续需要和APIServer通信
 	err := cfg.InitKubeConfigForKoordlet(*options.KubeAPIQPS, *options.KubeAPIBurst)
 	if err != nil {
 		klog.Fatalf("Unable to setup kubeconfig: %v", err)
 	}
 
+	// TODO 这里的Agent指的是KoordRuntimeProxy么？
 	d, err := agent.NewDaemon(cfg)
 	if err != nil {
 		klog.Fatalf("Unable to setup koordlet daemon: %v", err)

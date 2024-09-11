@@ -79,6 +79,7 @@ func FindSupportedEvictVersion(client kubernetes.Interface) (version string, err
 	return
 }
 
+// TODO 这里似乎在获取Pod API驱逐版本，估计是不同的版本之间存在差异
 func SupportEviction(client kubernetes.Interface) (string, error) {
 	var (
 		serverGroups          *metav1.APIGroupList

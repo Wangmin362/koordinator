@@ -45,8 +45,9 @@ type ResourceUpdateExecutor interface {
 
 type ResourceUpdateExecutorImpl struct {
 	LeveledUpdateLock sync.Mutex
-	ResourceCache     *cache.Cache
-	Config            *Config
+	// 本质上就是一个缓存，只不过缓存中的每个元素都有过期时间，没有指定的话，将会有一个默认的过期时间
+	ResourceCache *cache.Cache
+	Config        *Config
 
 	onceRun   sync.Once
 	gcStarted bool

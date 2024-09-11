@@ -48,8 +48,11 @@ type qosManager struct {
 	context *framework.Context
 }
 
-func NewQOSManager(cfg *framework.Config, schema *apiruntime.Scheme, kubeClient clientset.Interface, crdClient *koordclientset.Clientset, nodeName string,
-	statesInformer statesinformer.StatesInformer, metricCache metriccache.MetricCache, metricAdvisorConfig *ma.Config, evictVersion string) QOSManager {
+func NewQOSManager(cfg *framework.Config, schema *apiruntime.Scheme, kubeClient clientset.Interface,
+	crdClient *koordclientset.Clientset, nodeName string,
+	statesInformer statesinformer.StatesInformer, metricCache metriccache.MetricCache,
+	metricAdvisorConfig *ma.Config, evictVersion string) QOSManager {
+
 	eventBroadcaster := record.NewBroadcaster()
 	eventBroadcaster.StartRecordingToSink(&clientcorev1.EventSinkImpl{Interface: kubeClient.CoreV1().Events("")})
 	recorder := eventBroadcaster.NewRecorder(schema, corev1.EventSource{Component: "koordlet-qosManager", Host: nodeName})
@@ -101,11 +104,13 @@ func (r *qosManager) Run(stopCh <-chan struct{}) error {
 	klog.Info("Starting qos manager")
 	r.setup()
 
+	// 运行驱逐器
 	err := r.context.Evictor.Start(stopCh)
 	if err != nil {
 		klog.Fatal("start evictor failed %v", err)
 	}
 
+	// 运行各个插件
 	go framework.RunQOSGreyCtrlPlugins(r.options.KubeClient, stopCh)
 
 	if !cache.WaitForCacheSync(stopCh, r.options.StatesInformer.HasSynced) {

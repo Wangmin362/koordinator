@@ -37,11 +37,14 @@ type item struct {
 }
 
 type Cache struct {
-	items             map[string]item
+	items map[string]item
+	// KV默认的过期时间，如果item没有指定过期时间，应该就是使用的这个默认的过期时间
 	defaultExpiration time.Duration
-	gcInterval        time.Duration
-	gcStarted         bool
-	mu                sync.Mutex
+	// GC间隔，可以理解为垃圾回收的时间间隔
+	gcInterval time.Duration
+	// TODO 这个参数有啥用？
+	gcStarted bool
+	mu        sync.Mutex
 }
 
 func NewCacheDefault() *Cache {
@@ -55,8 +58,8 @@ func NewCacheDefault() *Cache {
 func NewCache(expiration time.Duration, gcInterval time.Duration) *Cache {
 	cache := Cache{
 		items:             map[string]item{},
-		defaultExpiration: expiration,
-		gcInterval:        gcInterval,
+		defaultExpiration: expiration, // 元素默认的过期时间
+		gcInterval:        gcInterval, // 多久执行一次清楚动作，可以理解为GC的时间间隔
 	}
 	if cache.defaultExpiration <= 0 {
 		cache.defaultExpiration = defaultExpiration
@@ -71,6 +74,7 @@ func (c *Cache) Run(stopCh <-chan struct{}) error {
 	defer runtime.HandleCrash()
 	c.gcStarted = true
 	go wait.Until(func() {
+		// 删除缓存中过期的元素
 		c.gcExpiredCache()
 	}, c.gcInterval, stopCh)
 	return nil

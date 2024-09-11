@@ -61,11 +61,26 @@ to the predictive model.
 The predictive model currently provides histogram-based statistics with exponentially decaying
 weights over time periods. PredictServer is responsible for storing the intermediate results of
 the model and recovering when the process restarts.
+
+中文解释：
+
+PredictServer负责从MetricCache获取数据，根据预定义模型训练预测结果，并提供获取预测结果的接口。
+
+需要注意的是，PredictServer根据捕获的数据得出的预测结果只与它看到的数据相关。例如，当我们需要处理冷启动时，应在使用预测数
+据时处理这一业务逻辑，而不是将其与预测模型耦合在一起。
+
+预测模型目前提供基于直方图的统计数据，权重随时间段呈指数衰减。PredictServer负责存储模型的中间结果，并在流程重新启动时进行恢复。
 */
 type PredictServer interface {
+	// Setup 接口用于给PredictServer设置它预测数据需要的依赖，也就是说PrecitServer预测服务的CPU, 内存使用情况是需要
+	// 以前的历史CPU, 内存使用情况，显然历史数据给的时间越长，越详细，PredictServer预测出来的数据将会更加准确
 	Setup(statesinformer.StatesInformer, metriccache.MetricCache) error
+	// Run 接口用于运行PredictServer，其实就是使用预训练模型根据提供的历史数据训练数据，预测将来CPU， 内存的使用情况
 	Run(stopCh <-chan struct{}) error
+	// 判断PredictServer关心的资源是否已经同步完成
 	HasSynced() bool
+	// GetPrediction 其实就是PredictServer最最核心的东西，当然这是对于用户来说的，因为们使用PredictServer就是为了预测将来CPU，
+	// 内存能使用的情况，这个接口就是用于获取预测结果的，也是用户需要的接口
 	GetPrediction(MetricDesc) (Result, error)
 }
 
@@ -87,8 +102,10 @@ type peakPredictServer struct {
 	models       map[UIDType]*PredictModel
 	modelsLock   sync.Mutex
 
-	clock        clock.Clock
-	hasSynced    *atomic.Bool
+	clock     clock.Clock
+	hasSynced *atomic.Bool
+	// 用于保存和恢复预测模型的东西，毕竟用户肯定不想在Koordlet重启之后PredictServer之前训练的数据丢失，所以保存和
+	// 恢复功能非常的重要
 	checkpointer Checkpointer
 }
 
@@ -110,13 +127,17 @@ func (p *peakPredictServer) Setup(statesInformer statesinformer.StatesInformer, 
 }
 
 func (p *peakPredictServer) Run(stopCh <-chan struct{}) error {
+	// 等待关心的资源同步完成
 	if !cache.WaitForCacheSync(stopCh, p.informer.HasSynced) {
 		return fmt.Errorf("time out waiting for states informer caches to sync")
 	}
 
+	// TODO 如何加载预训练模型？
+	// 看里面的代码其实就是CPU和内存的直方图
 	unknownUIDs := p.restoreModels()
 
 	// remove unknown checkpoints before starting to work
+	// TODO 这里在干嘛？ 为啥要这么做？
 	for _, uid := range unknownUIDs {
 		err := p.checkpointer.Remove(uid)
 		klog.InfoS("remove unknown checkpoint", "uid", uid)
@@ -125,8 +146,12 @@ func (p *peakPredictServer) Run(stopCh <-chan struct{}) error {
 		}
 	}
 
+	// 模型训练，其实就是把指标数据作为样本放入到模型当中
 	go wait.Until(p.training, p.cfg.TrainingInterval, stopCh)
+	// 回收不需要的模型，以减少CPU计算，释放内存
+	// TODO 那么什么样的模型被认为是不再需要的模型呢？ 我认为是已经被删除的Pod, Node模型就是不再需要的模型，因为在计算并没有意义
 	go wait.Until(p.gcModels, time.Minute, stopCh)
+	// 持久化模型
 	go wait.Until(p.doCheckpoint, time.Minute, stopCh)
 	<-stopCh
 	return nil
@@ -285,6 +310,7 @@ func (p *peakPredictServer) gcModels() {
 
 	tobeRemovedModels := make([]UIDType, 0)
 	p.modelsLock.Lock()
+	// 已经很久没有更新的模型，需要删除掉
 	for uid, model := range p.models {
 		if p.clock.Since(model.LastUpdated) > p.cfg.ModelExpirationDuration {
 			delete(p.models, uid)
@@ -378,6 +404,7 @@ func (p *peakPredictServer) restoreModels() (unknownUIDs []UIDType) {
 	// node items checkpoints (priority classes)
 	systemUID := p.uidGenerator.NodeItem(SystemItemID)
 	knownUIDs[systemUID] = true
+
 	for _, priorityClass := range extension.KnownPriorityClasses {
 		priorityUID := p.uidGenerator.NodeItem(string(priorityClass))
 		knownUIDs[priorityUID] = true

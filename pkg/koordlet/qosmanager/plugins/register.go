@@ -30,12 +30,13 @@ import (
 
 var (
 	StrategyPlugins = map[string]framework.QOSStrategyFactory{
-		blkio.BlkIOReconcileName:               blkio.New,
-		cgreconcile.CgroupReconcileName:        cgreconcile.New,
-		cpuburst.CPUBurstName:                  cpuburst.New,
-		cpuevict.CPUEvictName:                  cpuevict.New,
-		cpusuppress.CPUSuppressName:            cpusuppress.New,
-		memoryevict.MemoryEvictName:            memoryevict.New,
+		blkio.BlkIOReconcileName:        blkio.New,
+		cgreconcile.CgroupReconcileName: cgreconcile.New,
+		cpuburst.CPUBurstName:           cpuburst.New,
+		cpuevict.CPUEvictName:           cpuevict.New,
+		cpusuppress.CPUSuppressName:     cpusuppress.New,
+		memoryevict.MemoryEvictName:     memoryevict.New,
+		// Resctrl => Resource Control
 		resctrl.ResctrlReconcileName:           resctrl.New,
 		sysreconcile.SystemConfigReconcileName: sysreconcile.New,
 	}

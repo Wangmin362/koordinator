@@ -102,8 +102,12 @@ type informerPlugin interface {
 }
 
 // TODO merge all clients into one struct
-func NewStatesInformer(config *Config, kubeClient clientset.Interface, crdClient koordclientset.Interface, topologyClient topologyclientset.Interface,
-	metricsCache metriccache.MetricCache, nodeName string, schedulingClient schedv1alpha1.SchedulingV1alpha1Interface, predictorFactory prediction.PredictorFactory) StatesInformer {
+func NewStatesInformer(
+	config *Config, // 各种时间相关的配置
+	kubeClient clientset.Interface, crdClient koordclientset.Interface, topologyClient topologyclientset.Interface, // 各种客户端
+	metricsCache metriccache.MetricCache, nodeName string, schedulingClient schedv1alpha1.SchedulingV1alpha1Interface,
+	predictorFactory prediction.PredictorFactory,
+) StatesInformer {
 	opt := &PluginOption{
 		config:      config,
 		KubeClient:  kubeClient,

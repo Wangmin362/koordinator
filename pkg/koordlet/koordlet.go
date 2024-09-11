@@ -76,10 +76,12 @@ func NewDaemon(config *config.Configuration) (Daemon, error) {
 	klog.Infof("NODE_NAME is %v, start time %v", nodeName, float64(time.Now().Unix()))
 	metrics.RecordKoordletStartTime(nodeName, float64(time.Now().Unix()))
 
+	// TODO 应该为了方便排查问题增加的一些观测点
 	system.InitSupportConfigs()
 	klog.Infof("sysconf: %+v, agentMode: %v", system.Conf, system.AgentMode)
 	klog.Infof("kernel version INFO: %+v", system.HostSystemInfo)
 
+	// 初始化各种客户端工具，后续需要和APIServer通信获取关心的资源
 	kubeClient := clientset.NewForConfigOrDie(config.KubeRestConf)
 	crdClient := clientsetbeta1.NewForConfigOrDie(config.KubeRestConf)
 	topologyClient := topologyclientset.NewForConfigOrDie(config.KubeRestConf)
@@ -89,23 +91,37 @@ func NewDaemon(config *config.Configuration) (Daemon, error) {
 	if err != nil {
 		return nil, err
 	}
+	// 1、PredictServer本质上其实就是为了预测Pod, Node在某一时刻的使用量，这个预测的方式其实也并不难，其实就是统计学中的直方图采样，
+	// 通过不断的给模型喂当前Pod以及node的内存，CPU使用情况，从而预测将来Pod以及Node在某时刻的使用情况。
+	// 2、已经训练的模型是非常珍贵的，因为里面的历史数据已经为模型的准确性做了一些支撑，所谓在模型不断训练过程中，需要定期持久化模型，这样
+	// 万一Koordlet在重启之后，很有可能造成模型丢失，从而需要重投开始训练模型。而PredictServer通过checkpointer定期持久化模型，
+	// 这样方便Koordlet在重启之后能够恢复尽可能准确的模型
 	predictServer := prediction.NewPeakPredictServer(config.PredictionConf)
-	predictorFactory := prediction.NewPredictorFactory(predictServer, config.PredictionConf.ColdStartDuration, config.PredictionConf.SafetyMarginPercent)
+	predictorFactory := prediction.NewPredictorFactory(predictServer, config.PredictionConf.ColdStartDuration,
+		config.PredictionConf.SafetyMarginPercent)
 
-	statesInformer := statesinformerimpl.NewStatesInformer(config.StatesInformerConf, kubeClient, crdClient, topologyClient, metricCache, nodeName, schedulingClient, predictorFactory)
+	// TODO 缓存了什么内容？
+	statesInformer := statesinformerimpl.NewStatesInformer(config.StatesInformerConf, kubeClient, crdClient,
+		topologyClient, metricCache, nodeName, schedulingClient, predictorFactory)
 
+	// TODO cgroupfs驱动，systemd驱动，这两种类型的CGroup驱动有何不同？ 大多数时候直接使用systemd cgroup驱动即可
 	cgroupDriver := system.GetCgroupDriver()
 	system.SetupCgroupPathFormatter(cgroupDriver)
 
+	// 指标采集，想要做好在离混布，潮汐调度等功能，必须要把服务的资源画像做好，后续才能根据服务的资源画像提升机器的资源利用率
 	collectorService := metricsadvisor.NewMetricAdvisor(config.CollectorConf, statesInformer, metricCache)
 
+	// TODO 这玩意是啥？ 这里似乎在获取Pod API驱逐版本，估计是不同的版本之间存在差异
 	evictVersion, err := util.FindSupportedEvictVersion(kubeClient)
 	if err != nil {
 		return nil, err
 	}
 
-	qosManager := qosmanager.NewQOSManager(config.QOSManagerConf, scheme, kubeClient, crdClient, nodeName, statesInformer, metricCache, config.CollectorConf, evictVersion)
+	// TODO QOSManager原理分析
+	qosManager := qosmanager.NewQOSManager(config.QOSManagerConf, scheme, kubeClient, crdClient, nodeName, statesInformer,
+		metricCache, config.CollectorConf, evictVersion)
 
+	// TODO 这里应该才是KoordRuntimeProxy
 	runtimeHook, err := runtimehooks.NewRuntimeHook(statesInformer, config.RuntimeHookConf)
 	if err != nil {
 		return nil, err
@@ -129,6 +145,7 @@ func (d *daemon) Run(stopCh <-chan struct{}) {
 	klog.Infof("Starting daemon")
 
 	// start resource executor cache
+	// TODO executor是干嘛的？
 	d.executor.Run(stopCh)
 
 	go func() {
