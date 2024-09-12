@@ -30,6 +30,7 @@ import (
 )
 
 // RuntimeHookDispatcher dispatches hook request to RuntimeHookServer(e.g. koordlet)
+// CRI返回的请求会被转发给Koordlet，Koordlet可能会修改其中的某些参数
 type RuntimeHookDispatcher struct {
 	cm          client.HookServerClientManagerInterface
 	hookManager config.ManagerInterface

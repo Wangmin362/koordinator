@@ -47,6 +47,7 @@ var _ runtimeapi.RuntimeServiceServer = &criServer{}
 
 type criServer struct {
 	RuntimeRequestInterceptor
+	// 真正的底层CRI容器运行时
 	backendRuntimeServiceClient runtimeapi.RuntimeServiceClient
 }
 
@@ -67,14 +68,17 @@ func (c *RuntimeManagerCriServer) Name() string {
 }
 
 func (c *RuntimeManagerCriServer) Run() error {
+	// 真正的容器运行时客户端，其实就是CRI client
 	remoteConn, err := c.initCriServer(options.RemoteRuntimeServiceEndpoint)
 	if err != nil {
 		return err
 	}
+	// TODO 这里似乎是在做备份
 	c.failOver()
 
 	klog.Infof("do failOver done")
 
+	// 启动KoordRuntimeProxy服务
 	listener, err := net.Listen("unix", options.RuntimeProxyEndpoint)
 	if err != nil {
 		klog.Errorf("failed to create listener, error: %v", err)
@@ -89,6 +93,7 @@ func (c *RuntimeManagerCriServer) Run() error {
 		grpc.UnknownServiceHandler(proxy.TransparentHandler(director)),
 	)
 	if c.criServer != nil {
+		// TODO 注册CRI服务, CRIServer其实就是一个CRI实现，只不过仅仅实现了有限的接口
 		runtimeapi.RegisterRuntimeServiceServer(grpcServer, c.criServer)
 	}
 	err = grpcServer.Serve(listener)
@@ -114,10 +119,16 @@ func (c *RuntimeManagerCriServer) getRuntimeHookInfo(serviceType RuntimeServiceT
 	return config.NoneRuntimeHookPath, resource_executor.RuntimeNoopResource
 }
 
-func (c *RuntimeManagerCriServer) InterceptRuntimeRequest(serviceType RuntimeServiceType,
-	ctx context.Context, request interface{}, handler grpc.UnaryHandler, alphaRuntime bool) (interface{}, error) {
+func (c *RuntimeManagerCriServer) InterceptRuntimeRequest(
+	serviceType RuntimeServiceType, // CRI服务类型，可以理解为不同的接口，KoordRuntimeProxy只对其中的几个接口感兴趣，其余
+	ctx context.Context, // 请求上下文
+	request interface{}, // 请求参数
+	handler grpc.UnaryHandler, // 底层的运行时
+	alphaRuntime bool, // 是否是CRI Alpha版本接口
+) (interface{}, error) {
 	runtimeHookPath, runtimeResourceType := c.getRuntimeHookInfo(serviceType)
 
+	// 资源更新器，用于更新Pod以及容器的相关参数
 	resourceExecutor := resource_executor.NewRuntimeResourceExecutor(runtimeResourceType)
 
 	var err error
@@ -155,6 +166,7 @@ func (c *RuntimeManagerCriServer) InterceptRuntimeRequest(serviceType RuntimeSer
 	//		return nil, err
 	//	}
 	//}
+	// 底层的容器运行时处理真正的请求
 	res, err := handler(ctx, request)
 	// responseConverted := false
 	if err == nil {
@@ -207,11 +219,12 @@ func (c *RuntimeManagerCriServer) initCriServer(runtimeSockPath string) (*grpc.C
 	}
 
 	// According to the version of cri api supported by backend runtime, create the corresponding cri server.
+	// 查询容器运行时的版本，CRI目前已经演进了多个版本
 	_, v1Err := runtimeapi.NewRuntimeServiceClient(runtimeConn).Version(context.Background(), &runtimeapi.VersionRequest{})
 	if v1Err == nil {
 		c.criServer = &criServer{
-			RuntimeRequestInterceptor:   c,
-			backendRuntimeServiceClient: runtimeapi.NewRuntimeServiceClient(runtimeConn),
+			RuntimeRequestInterceptor:   c,                                               // 拦截器就是自己，也就是KoordRuntimeProxy
+			backendRuntimeServiceClient: runtimeapi.NewRuntimeServiceClient(runtimeConn), // 后端为真正的容器运行时，要么是Docker, 要么是Containerd
 		}
 	}
 	if c.criServer == nil {

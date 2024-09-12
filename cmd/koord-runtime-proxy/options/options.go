@@ -30,10 +30,13 @@ const (
 )
 
 var (
-	RuntimeProxyEndpoint         string
+	// 这里是KoordRuntimeProxy真正监听的Sock地址，Kubelet调用CRI的时候就是调用的这里
+	RuntimeProxyEndpoint string
+	// 这里传入的是真正的CRI运行时，KoordRuntimeProxy拦截CRI请求，经过修改之后转发给真正的容器运行时，这里就是在指定真正的容器运行时
 	RemoteRuntimeServiceEndpoint string
 
 	// BackendRuntimeMode default to 'containerd'
+	// containerd还是docker TODO 这里其实使用枚举来定义会更加好一些
 	BackendRuntimeMode string
 
 	RuntimeHookServerKey string

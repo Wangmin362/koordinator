@@ -30,6 +30,7 @@ import (
 
 var _ ResourceUpdateExecutor = &ResourceUpdateExecutorImpl{}
 
+// ResourceUpdateExecutor 本质上就是一个缓存，只不过缓存中的每个元素都有过期时间，没有指定的话，将会有一个默认的过期时间
 type ResourceUpdateExecutor interface {
 	Update(cacheable bool, updater ResourceUpdater) (updated bool, err error)
 	UpdateBatch(cacheable bool, updaters ...ResourceUpdater)
@@ -53,13 +54,13 @@ type ResourceUpdateExecutorImpl struct {
 	gcStarted bool
 }
 
+func NewResourceUpdateExecutor() ResourceUpdateExecutor {
+	return singleton
+}
+
 var singleton = &ResourceUpdateExecutorImpl{
 	ResourceCache: cache.NewCacheDefault(),
 	Config:        Conf,
-}
-
-func NewResourceUpdateExecutor() ResourceUpdateExecutor {
-	return singleton
 }
 
 // Update updates the resources with the given cacheable attribute with the cacheable attribute directly.

@@ -26,11 +26,13 @@ import (
 )
 
 func (c *criServer) Version(ctx context.Context, req *runtimeapi.VersionRequest) (*runtimeapi.VersionResponse, error) {
+	// 直接调用底层的容器运行时返回
 	return c.backendRuntimeServiceClient.Version(ctx, req)
 }
 
 func (c *criServer) RunPodSandbox(ctx context.Context, req *runtimeapi.RunPodSandboxRequest) (*runtimeapi.RunPodSandboxResponse, error) {
 	rsp, err := c.InterceptRuntimeRequest(RunPodSandbox, ctx, req,
+		// 结果肯定还是要转发到真正的CRI容器运行时
 		func(ctx context.Context, req interface{}) (interface{}, error) {
 			return c.backendRuntimeServiceClient.RunPodSandbox(ctx, req.(*runtimeapi.RunPodSandboxRequest))
 		}, false)

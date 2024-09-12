@@ -26,6 +26,7 @@ import (
 	"github.com/koordinator-sh/koordinator/pkg/koordlet/statesinformer"
 )
 
+// Options TODO 这里称之为选项，其实我觉得称之为依赖会更加合适，QOSManager的插件将会依赖这里的组件
 type Options struct {
 	CgroupReader        resourceexecutor.CgroupReader
 	StatesInformer      statesinformer.StatesInformer

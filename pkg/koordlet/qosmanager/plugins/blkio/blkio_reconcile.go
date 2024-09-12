@@ -58,11 +58,16 @@ const (
 var _ framework.QOSStrategy = &blkIOReconcile{}
 
 type blkIOReconcile struct {
+	// 调谐周期
 	reconcileInterval time.Duration
-	statesInformer    statesinformer.StatesInformer
-	metricCache       metriccache.MetricCache
-	executor          resourceexecutor.ResourceUpdateExecutor
-	storageInfo       *metriccache.NodeLocalStorageInfo
+	// 用于采集Pod, Node, 容器， PVC等等资源的详情
+	statesInformer statesinformer.StatesInformer
+	// 用于缓存两种类型的数据，一种是基于时间的TSDB数据，一种是静态数据，其实就是StatesInformer提供的数据
+	metricCache metriccache.MetricCache
+	// 执行器，用于更新资源 本质上就是一个缓存，只不过缓存中的每个元素都有过期时间，没有指定的话，将会有一个默认的过期时间
+	executor resourceexecutor.ResourceUpdateExecutor
+	// 底层的磁盘，和挂载卷相关信息
+	storageInfo *metriccache.NodeLocalStorageInfo
 }
 
 func (b *blkIOReconcile) Enabled() bool {
@@ -73,6 +78,8 @@ func (b *blkIOReconcile) Setup(context *framework.Context) {
 }
 
 func (b *blkIOReconcile) Run(stopCh <-chan struct{}) {
+	// 1、启动ResourceUpdateExecutor，本质上就是一个缓存
+	// 2、等待PVC资源同步完成
 	if err := b.init(stopCh); err != nil {
 		klog.Fatal("blkIOReconcile init failed, error %v", err)
 		return
@@ -119,7 +126,7 @@ func (b *blkIOReconcile) reconcile() {
 		klog.Fatalf("type error, expect %T， but got %T", metriccache.NodeLocalStorageInfo{}, storageInfoRaw)
 	}
 	b.storageInfo = storageInfo
-	// get nodeslo
+	// get nodeslo  用户定义的节点的SLO指标
 	nodeSLO := b.statesInformer.GetNodeSLO()
 	if nodeSLO == nil || nodeSLO.Spec.ResourceQOSStrategy == nil {
 		klog.Errorf("%s: nodeSLO or resourceQOSStrategy is nil, skip reconcile blkio!", BlkIOReconcileName)
@@ -127,6 +134,7 @@ func (b *blkIOReconcile) reconcile() {
 	}
 
 	// update node blk qos by strategy defined in nodeslo
+	// 用户定义的node节点SLO相关指标
 	strategy := nodeSLO.Spec.ResourceQOSStrategy
 	// lsr
 	if strategy.LSRClass != nil && strategy.LSRClass.BlkIOQOS != nil && *strategy.LSRClass.BlkIOQOS.Enable && len(strategy.LSRClass.BlkIOQOS.Blocks) != 0 {
@@ -139,7 +147,7 @@ func (b *blkIOReconcile) reconcile() {
 	// be
 	if strategy.BEClass != nil && strategy.BEClass.BlkIOQOS != nil {
 		klog.V(4).Infof("%s: start to reconcile be class blkio config", BlkIOReconcileName)
-		blocks := []*slov1alpha1.BlockCfg{}
+		var blocks []*slov1alpha1.BlockCfg
 		if *strategy.BEClass.BlkIOQOS.Enable {
 			blocks = strategy.BEClass.BlkIOQOS.Blocks
 		}
@@ -244,7 +252,11 @@ type blkioUpdater struct {
 // update blkio cgroup files
 // podMeta == nil when BlockType is BlockTypeDevice or BlockTypeVolumeGroup
 // podMeta != nil when BlockType is BlockTypePodVolume
-func (b *blkIOReconcile) updateBlkIOConfig(blocks []*slov1alpha1.BlockCfg, podMeta *statesinformer.PodMeta, blkioUpdater blkioUpdater) error {
+func (b *blkIOReconcile) updateBlkIOConfig(
+	blocks []*slov1alpha1.BlockCfg,
+	podMeta *statesinformer.PodMeta,
+	blkioUpdater blkioUpdater,
+) error {
 	if blkioUpdater.getDiskRecorder == nil {
 		return fmt.Errorf("getDiskRecorder can not be nil")
 	}

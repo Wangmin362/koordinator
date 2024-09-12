@@ -46,14 +46,17 @@ func main() {
 	pflag.CommandLine.AddGoFlagSet(flag.CommandLine)
 	pflag.Parse()
 
+	// 删除之前的sock文件，后面要重新创建这个sock文件，之后通过UDS和kubelet进行通信
 	if err := os.Remove(options.RuntimeProxyEndpoint); err != nil && !os.IsNotExist(err) {
 		klog.Fatalf("failed to unlink %v: %v", options.RuntimeProxyEndpoint, err)
 	}
 
+	// 创建sock文件所在的文件夹
 	if err := os.MkdirAll(filepath.Dir(options.RuntimeProxyEndpoint), 0755); err != nil {
 		klog.Fatalf("failed to mkdir %v: %v", filepath.Dir(options.RuntimeProxyEndpoint), err)
 	}
 
+	// TODO 这里为什么目前只支持Containerd, Docker两种容器运行时，为什么不支持任何兼容CRI规范的容器运行时
 	switch options.BackendRuntimeMode {
 	case options.BackendRuntimeModeContainerd:
 		server := cri.NewRuntimeManagerCriServer()
