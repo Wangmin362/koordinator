@@ -59,6 +59,7 @@ var (
 	restConfigBurst = flag.Int("rest-config-burst", 50, "Burst of rest config.")
 )
 
+// TODO Manager应该可以理解为Controller，用于调谐Koordnator自定义的资源，以实现用户的期望
 func main() {
 	var metricsAddr, pprofAddr string
 	var healthProbeAddr string
@@ -120,7 +121,7 @@ func main() {
 	}
 
 	mgrOpt := ctrl.Options{
-		Scheme:                     options.Scheme,
+		Scheme:                     options.Scheme, // Scheme掌握了GVR -> Type  GVK -> Type  Type -> GVR等关键信息
 		Metrics:                    metricsserver.Options{BindAddress: metricsAddr},
 		HealthProbeBindAddress:     healthProbeAddr,
 		LeaderElection:             enableLeaderElection,
@@ -139,6 +140,7 @@ func main() {
 	installMetricsHandler(mgrOpt)
 	ctx := ctrl.SetupSignalHandler()
 
+	// TODO 意思是支持Webhook扩展？
 	if utilfeature.DefaultFeatureGate.Enabled(features.WebhookFramework) {
 		setupLog.Info("setup webhook opt")
 		webhook.SetupWithWebhookOpt(&mgrOpt)
@@ -151,11 +153,13 @@ func main() {
 	}
 
 	setupLog.Info("register field index")
+	// TODO 这里是在干啥？
 	if err := fieldindex.RegisterFieldIndexes(mgr.GetCache()); err != nil {
 		setupLog.Error(err, "failed to register field index")
 		os.Exit(1)
 	}
 
+	// TODO 其它Controller的注册就在这里
 	if err := opts.ApplyTo(mgr); err != nil {
 		setupLog.Error(err, "unable to setup controllers")
 		os.Exit(1)
